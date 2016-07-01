@@ -60,7 +60,7 @@ class TFIDF:
         elif not threshold is None:
             return [term[0] for term in self.terms if term[1] > threshold]
         else:
-            raise(ValueError("Either `head` or `threshold` must be set"))
+            return self.terms
 
     @property
     def idf_vector(self):
