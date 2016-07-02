@@ -1,53 +1,110 @@
-#!/usr/bin/python
-# -*- coding: utf-8 -*-
+# -*- coding: utf -*-
+"""
+webpage content process class
 
-import requests
+process webpage content cleaning
+html elements feature extract
+natual language stemming and words count
+
+return a dict object
+"""
+import re
 from bs4 import BeautifulSoup
+from collections import Counter
+
+import nltk
+from nltk import word_tokenize
+from nltk import pos_tag
+
+wnl = nltk.WordNetLemmatizer()
+porter = nltk.PorterStemmer()
+
+def tagger():
+    # current one is nltk pos_tag tagger
+    return pos_tag
+
+def sentence_word_tagger_stemmer(paragraph, selected=None):
+    if selected is None:
+        selected = ('NN', 'JJ', 'PR', 'RB', 'UH', 'VB')
+    tags = pos_tag(word_tokenize(paragraph))
+
+    # filter by selected tags
+    words = [tag[0] for tag in tags if tag[1][:2] in selected]
+
+    # Lemmatization
+    #words = [wnl.lemmatize(word) for word in words]
+
+    # Stem
+    words = [porter.stem(word) for word in words]
+
+    return words
 
 
 class PageContentProcessor(object):
     """
     GET url content and extract text from content.
     process `<p>` text with natural language process technology
+
+    webpage content is body element of html page content
     """
 
-    tags_extract = ['p', 'a', 'article']
-    tags_count = ['pre', 'form', 'img']
-    #tags_remove = ['script', 'link', 'style']
-    def __init__(self, timeout=3):
-        self.timeout = timeout
-
-    def process_url_content(self, url):
+    def __init__(self, tags_extract=None, tags_count=None):
         """
-        GET Response from url and process HTML content
+        tags_extract default ('p', 'a', 'article')
+        tags_count default ('pre', 'form', 'img', 'script', 'link', 'style')
         """
-        response = requests.get(url, timeout=self.timeout)
-        body = BeautifulSoup(response.content).find('body')
+        if tags_extract is None:
+            tags_extract = ('p', 'a', 'article')
+        if tags_count is None:
+            tags_count = ('pre', 'form', 'img', 'script', 'link', 'style')
 
-        results = dict()
-        for tag in self.tags_extract:
-            results[tag] = ' '.join([x.get_text() for x in body.findAll(tag)])
+        self.tags_extract = tags_extract
+        self.tags_count = tags_count
+        self.tags_remove = ('script', 'link', 'style')
 
-        for tag in self.tags_count:
-            results[tag] = len(body.findAll(tag))
+    def count_html_element(self, webpagecontent):
+        """
+        count pre-defined elements
+        """
+        #assert isinstance(webpagecontent, BeautifulSoup)
 
-        response.close()
-        return results
+        counter = Counter()
+        for element in self.tags_count:
+            counter[element] += len(webpagecontent.findAll(element))
+        return counter
 
     @staticmethod
-    def word_count(words):
-        results = dict()
-        for w in words:
-            results.setdefault(w, 1)
-            results[w] += 1
-        return results
+    def clean_paragraph(paragraph):
+        # add ntlk feature in this function
+        return sentence_word_tagger_stemmer(paragraph)
 
-    def __call__(self, url):
-        return self.process_url_content(url)
+    def text_extract(self, webpagecontent):
+        text = []
+        #for element in self.tags_extract:
+        #    text += webpagecontent.findAll(element)
+        #print text
+        for element in self.tags_remove: 
+            for s in webpagecontent(element):
+                s.extract()
+        text = webpagecontent.get_text()
+        return Counter(self.clean_paragraph(text))
 
+    def __call__(self, webpagecontent):
+        output = dict()
+        output['count_element'] = dict(self.count_html_element(webpagecontent))
+        output['count_words'] = dict(self.text_extract(webpagecontent))
+        return output
 
 
 if __name__ == "__main__":
-    page_content = PageContentProcessor()
+    import sys
     import json
-    print json.dumps(page_content('http://www.abcya.com/animate.htm'))
+    pcp = PageContentProcessor()
+
+    with sys.stdin as f:
+        for line in f:
+            row = json.loads(line)
+            webpagecontent = BeautifulSoup(row.pop('content')).body
+            row.update(pcp(webpagecontent))
+            print json.dumps(row)
+
